@@ -1,0 +1,31 @@
+{
+    "author": [
+        "0x4272616E646F6E"
+    ],
+    "description": "Human-like Discord interactions powered by local LLMs for messages",
+    "install_msg": "See cog README for additional setup.",
+    "short": "Human-like user behavior powered by LLMs.",
+    "permissions": [
+        "read_messages",
+        "send_messages",
+        "embed_links",
+        "attach_files",
+        "add_reactions"
+    ],
+    "requirements": [
+        "openai>=1.3.8",
+        "tenacity",
+        "tiktoken",
+        "Pillow",
+        "trafilatura",
+        "aiohttp",
+        "gradio_client"
+    ],
+    "end_user_data_statement": "This cog does not autonomously store data or metadata concerning users.",
+    "tags": [
+        "local",
+        "chatbot",
+        "ai"
+    ],
+    "min_bot_version": "3.5.0"
+}

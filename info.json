@@ -1,0 +1,22 @@
+{
+    "author" : [
+        "0x4272616E646F6E"
+    ],
+    "description" : "Some utility cogs.",
+    "disabled" : false,
+    "end_user_data_statement" : "This cog does not persistently store data or metadata about users.",
+    "hidden" : false,
+    "install_msg" : "Thanks for installing my repo! Please report any issues in the git repository.",
+    "max_bot_version" : "0.0.0",
+    "min_bot_version" : "3.5.0",
+    "min_python_version" : [3, 11, 0],
+    "name" : "0x42-cogs",
+    "permissions" : [],
+    "required_cogs" : {},
+    "requirements" : [],
+    "short" : "Utility cogs.",
+    "tags" : [
+        "utility"
+    ],
+    "type" : "REPO"
+}
