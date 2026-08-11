@@ -1,0 +1,23 @@
+{
+    "author": [
+        "0x4272616E646F6E"
+    ],
+    "description": "Cogs for Redbot.",
+    "disabled": false,
+    "hidden": false,
+    "install_msg": "Thanks for installing my repo, Please report any issues in the git repository.",
+    "min_bot_version": "3.5.1",
+    "min_python_version": [
+        3,
+        11,
+        0
+    ],
+    "name": "0x42-cogs",
+    "short": "Cogs for Redbot.",
+    "tags": [
+        "utility",
+        "ai",
+        "local"
+    ],
+    "type": "REPO"
+}

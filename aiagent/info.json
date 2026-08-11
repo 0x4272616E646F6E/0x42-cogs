@@ -1,0 +1,35 @@
+{
+    "author": [
+        "0x4272616E646F6E"
+    ],
+    "description": "Human-like Discord interactions powered by an LLM. Point it at any OpenAI-compatible endpoint - typically a local server you host yourself (Ollama, llama.cpp, vLLM, LM Studio, ...). No provider-specific configuration.",
+    "install_msg": "Point the cog at your LLM endpoint with `[p]aiagentowner endpoint <URL>` (default: http://localhost:11434/v1), pick a model with `[p]aiagent model list`, then whitelist a channel with `[p]aiagent add #channel`. See the cog README for the rest.",
+    "short": "Human-like user behavior powered by a local LLM.",
+    "permissions": [
+        "read_messages",
+        "send_messages",
+        "embed_links",
+        "attach_files",
+        "add_reactions"
+    ],
+    "requirements": [
+        "openai>=2.0,<3",
+        "httpx>=0.27,<1",
+        "tiktoken>=0.7",
+        "tenacity>=8.2.3"
+    ],
+    "end_user_data_statement": "This cog stores the Discord user IDs of users who have opted in or out of having their messages processed, plus any per-user prompt overrides a server admin sets. Message content is not stored persistently; recent channel messages are read at response time and sent to the LLM endpoint the bot owner has configured.",
+    "tags": [
+        "local",
+        "llm",
+        "chatbot",
+        "ai",
+        "ollama"
+    ],
+    "min_bot_version": "3.5.1",
+    "min_python_version": [
+        3,
+        11,
+        0
+    ]
+}
