@@ -18,6 +18,17 @@ def format_text_content(message: Message):
     return f'User "{message.author.display_name}" said: {content}'
 
 
+def format_embed_content(message: Message):
+    """Describe the embed attached to a message, if it has one."""
+    if not message.embeds:
+        return None
+    embed = message.embeds[0]
+    return (
+        f'User "{message.author.display_name}" sent: '
+        f'[Embed with title "{embed.title}" and description "{embed.description}"]'
+    )
+
+
 def format_embed_text_content(message: Message):
     content = mention_to_text(message)
     content = URL_PATTERN.sub("", content)

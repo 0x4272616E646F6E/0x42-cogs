@@ -55,12 +55,15 @@ proxy in front of it), set one — otherwise skip this entirely:
 
 ## Usage
 
-The bot generates responses in whitelisted channels. Bot owners can change the
-percentage of eligible messages it replies to:
+**Tag the bot to talk to it.** In a whitelisted channel, mention it or reply to one of
+its messages and it answers — every time, no dice roll:
 
 ```
-[p]aiagent percent <PERCENT>
+@YourBot what is the discrete logarithm problem?
 ```
+
+It never speaks unprompted. Anything that doesn't tag it is ignored, even in a
+whitelisted channel.
 
 Users must opt in (bot-wide) before their messages are used:
 
@@ -76,6 +79,22 @@ Admins can modify prompt settings with:
 
 See all settings with `[p]aiagent` and `[p]aiagentowner`. Some settings are bot owner only.
 
+## Rate limits
+
+To stop one person, or one busy moment, from saturating your GPU:
+
+- each user waits **10 seconds** between mention-triggered responses
+- the bot generates at most **2 responses at once**, bot-wide
+- beyond that, requests **queue** — up to **5 per channel**
+
+If the bot is busy you get an ⏳ and your message is answered when a slot frees.
+You get a 💤 instead when the queue for that channel is full, or when the wait
+would have made the answer too late to be useful: nothing older than **60 seconds**
+is answered, because a reply arriving after the conversation moved on is worse
+than no reply. `/chat` keeps its own cooldown on top of this.
+
+The values live in `aiagent/core/throttle.py`.
+
 ## Context size
 
 The cog estimates how much channel history fits in the model's context window from the
@@ -87,14 +106,34 @@ model, set it explicitly per server:
 ```
 
 Token counts shown by the cog are estimates — local models use their own tokenizers,
-which the OpenAI API doesn't expose.
+which the OpenAI API doesn't expose. The estimator deliberately runs high (roughly 1x–2.5x
+a real tokenizer's count) so a long history can't overflow the model's context; see
+`aiagent/utils/tokens.py`. The cog downloads nothing to do this.
 
 ## Sampling parameters
 
-Whatever your server accepts (`temperature`, `top_p`, `max_tokens`, `stop`, `seed`, ...):
+Set the common knobs directly (per server, admin only):
 
 ```
-[p]aiagent response parameters ```{"temperature": 0.8, "max_tokens": 200}```
+[p]aiagent response temperature 0.8
+[p]aiagent response top_k 40
+[p]aiagent response repetitionpenalty 1.1
+[p]aiagent response sampling          # show what's set
+```
+
+Leave the value off to unset one, e.g. `[p]aiagent response top_k`.
+
+`temperature` is part of the OpenAI API and is sent as a normal field. `top_k` and
+`repetition_penalty` are not — they are sent as extra top-level JSON fields, which is
+where llama.cpp, vLLM and LM Studio look for them. A server that doesn't recognise a
+field either ignores it or replies 400, in which case the bot reacts ⚠️ and logs which
+parameters were sent.
+
+Anything else your server supports goes through the raw JSON command, and is routed the
+same way:
+
+```
+[p]aiagent response parameters ```{"min_p": 0.05, "repeat_penalty": 1.1}```
 ```
 
 `model`, `messages` and `stream` are set by the cog and can't be overridden.
@@ -127,10 +166,10 @@ Remove list regex patterns only support `{authorname}` (will use authors of last
 |---|---|
 | Python | 3.11 (Red supports `>=3.8.1,<3.12`, so this is the newest usable) |
 | Red-DiscordBot | 3.5.1 or newer |
-| Installed by Downloader | `openai>=2.0,<3`, `pydantic>=2.7,<2.12`, `httpx>=0.27,<1`, `tiktoken>=0.7`, `tenacity>=8.2.3` |
+| Installed by Downloader | `openai>=2.0,<3`, `pydantic>=2.7,<2.12`, `httpx>=0.27,<1` |
 
-`aiohttp` and `discord.py` come from Red itself, which pins them exactly, so this cog
-does not declare them.
+`discord.py` comes from Red itself, which pins it exactly (`discord-py==2.7.1`), so this
+cog does not declare it.
 
 ### Why pydantic is capped
 

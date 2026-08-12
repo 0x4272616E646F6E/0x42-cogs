@@ -3,7 +3,8 @@ from openai import AsyncOpenAI
 from redbot.core import Config, commands
 
 from aiagent.types.enums import MentionType
-from aiagent.utils.utilities import format_variables, get_encoding
+from aiagent.utils.tokens import estimate_tokens
+from aiagent.utils.utilities import format_variables
 
 
 async def get_available_models(openai_client: AsyncOpenAI) -> list[str]:
@@ -32,14 +33,14 @@ def get_config_attribute(config, mention_type: MentionType, ctx: commands.Contex
         return config.role(mention)
     elif mention_type == MentionType.CHANNEL:
         return config.channel(mention)
- 
+
 
 async def get_tokens(config: Config, ctx: commands.Context, prompt: str) -> int:
-    """Estimated token count of a prompt. See `get_encoding`."""
+    """Estimated token count of a prompt. See `aiagent.utils.tokens`."""
     if not prompt:
         return 0
     prompt = await format_variables(ctx, prompt)  # to provide a better estimate
-    return len(get_encoding().encode(prompt, disallowed_special=()))
+    return estimate_tokens(prompt)
 
 
 def truncate_prompt(prompt: str, limit: int = 1900) -> str:

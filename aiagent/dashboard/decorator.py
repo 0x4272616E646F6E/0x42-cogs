@@ -6,4 +6,4 @@ def dashboard_page(*args, **kwargs):
     def decorator(func: typing.Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
-    return decorator 
+    return decorator

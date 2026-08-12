@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-import re
+from typing import Optional
 
 import discord
 from redbot.core import checks, commands
@@ -11,7 +11,9 @@ from redbot.core.utils.predicates import ReactionPredicate
 
 from aiagent.config.constants import RESERVED_PARAMETERS
 from aiagent.config.defaults import DEFAULT_REMOVE_PATTERNS
+from aiagent.response.chat.parameters import SAMPLING_PARAMETERS
 from aiagent.types.abc import MixinMeta, aiagent
+from aiagent.utils import regex as regex_utils
 
 logger = logging.getLogger("red.0x42_cogs.aiagent")
 
@@ -35,10 +37,9 @@ class ResponseSettings(MixinMeta):
     @removelist.command(name="add")
     async def removelist_add(self, ctx: commands.Context, *, regex_pattern: str):
         """Add a regex pattern to the list of patterns to remove from responses"""
-        try:
-            re.compile(regex_pattern)
-        except re.error:
-            return await ctx.send("Sorry, but that regex pattern seems to be invalid.")
+        error = regex_utils.validate_pattern(regex_pattern)
+        if error:
+            return await ctx.send(f":warning: {error}")
 
         removelist_regexes = await self.config.guild(ctx.guild).removelist_regexes()
 
@@ -122,6 +123,118 @@ class ResponseSettings(MixinMeta):
 
         await ctx.send(embed=embed)
 
+    async def _store_parameter(self, ctx: commands.Context, key: str, value):
+        """Write one key into the server's parameters blob, or remove it."""
+        parameters = await self.config.guild(ctx.guild).parameters()
+        data = json.loads(parameters) if parameters else {}
+
+        if value is None:
+            data.pop(key, None)
+        else:
+            data[key] = value
+
+        await self.config.guild(ctx.guild).parameters.set(
+            json.dumps(data) if data else None
+        )
+
+    async def _set_sampling_parameter(
+        self, ctx: commands.Context, key: str, value: Optional[float]
+    ):
+        parameter = SAMPLING_PARAMETERS[key]
+
+        if value is not None:
+            error = parameter.validate(value)
+            if error:
+                return await ctx.send(
+                    f":warning: {error}\n"
+                    f"For values outside that range, use "
+                    f"`{ctx.clean_prefix}aiagent response parameters`."
+                )
+            if parameter.integer:
+                value = int(value)
+
+        await self._store_parameter(ctx, key, value)
+
+        embed = discord.Embed(color=await ctx.embed_color())
+        if value is None:
+            embed.title = f"{parameter.label} is no longer set"
+            embed.description = "Your LLM server's own default will be used."
+        else:
+            embed.title = f"{parameter.label} is now:"
+            embed.description = f"`{value}`"
+        return await ctx.send(embed=embed)
+
+    @response.command(name="temperature", aliases=["temp"])
+    async def set_temperature(self, ctx: commands.Context, value: Optional[float]):
+        """ Set the sampling temperature for this server
+
+            Higher is more random, lower is more deterministic.
+            Leave the value blank to unset it.
+
+            **Arguments**
+                - `value` A number between 0.0 and 2.0
+        """
+        await self._set_sampling_parameter(ctx, "temperature", value)
+
+    @response.command(name="top_k", aliases=["topk"])
+    async def set_top_k(self, ctx: commands.Context, value: Optional[int]):
+        """ Limit sampling to the K most likely tokens
+
+            Sent to your LLM server as `top_k`. Not part of the OpenAI API —
+            llama.cpp and vLLM honour it, some servers ignore it.
+            Leave the value blank to unset it, or use `0` to disable it.
+
+            **Arguments**
+                - `value` A whole number, 0 or greater
+        """
+        await self._set_sampling_parameter(ctx, "top_k", value)
+
+    @response.command(name="repetitionpenalty", aliases=["reppenalty"])
+    async def set_repetition_penalty(
+        self, ctx: commands.Context, value: Optional[float]
+    ):
+        """ Penalise tokens the model has already used
+
+            Sent to your LLM server as `repetition_penalty`. `1.0` is no penalty.
+            Servers using the `repeat_penalty` spelling (llama.cpp, LM Studio) need
+            `[p]aiagent response parameters` instead.
+            Leave the value blank to unset it.
+
+            **Arguments**
+                - `value` A number greater than 0.0 and up to 2.0
+        """
+        await self._set_sampling_parameter(ctx, "repetition_penalty", value)
+
+    @response.command(name="sampling")
+    async def show_sampling(self, ctx: commands.Context):
+        """ Show the sampling parameters set for this server """
+        parameters = await self.config.guild(ctx.guild).parameters()
+        data = json.loads(parameters) if parameters else {}
+
+        embed = discord.Embed(
+            title="Sampling parameters", color=await ctx.embed_color()
+        )
+        for key, parameter in SAMPLING_PARAMETERS.items():
+            value = data.get(key)
+            embed.add_field(
+                name=parameter.label,
+                value=f"`{value}`" if value is not None else "`not set`",
+                inline=True,
+            )
+
+        others = {k: v for k, v in data.items() if k not in SAMPLING_PARAMETERS}
+        if others:
+            embed.add_field(
+                name="Other custom parameters",
+                value=box(json.dumps(others, indent=2)),
+                inline=False,
+            )
+
+        embed.set_footer(
+            text="Values are sent to your LLM server; whether it honours them is up to it."
+        )
+        return await ctx.send(embed=embed)
+
     @response.command(name="parameters")
     @checks.is_owner()
     async def set_custom_parameters(self, ctx: commands.Context, *, json_block: str):
@@ -154,9 +267,9 @@ class ResponseSettings(MixinMeta):
             try:
                 data = json.loads(json_block)
             except json.JSONDecodeError:
-                return await ctx.channel.send(":warning: Invalid JSON format!")
+                return await ctx.send(":warning: Invalid JSON format!")
 
-            invalid_keys = [key for key in data.keys() if key in RESERVED_PARAMETERS]
+            invalid_keys = [key for key in data if key in RESERVED_PARAMETERS]
             if invalid_keys:
                 invalid_keys_str = ", ".join([f"`{key}`" for key in invalid_keys])
                 return await ctx.send(f":warning: Invalid JSON! Please remove \"{invalid_keys_str}\" key from your JSON.")

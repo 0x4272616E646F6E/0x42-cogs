@@ -12,12 +12,14 @@ logger = logging.getLogger("red.0x42_cogs.aiagent")
 
 class HistorySettings(MixinMeta):
     @aiagent.group(name="history", aliases=["context"])
-    @checks.is_owner()
+    @checks.admin_or_permissions(manage_guild=True)
     async def history(self, _):
         """ Change the prompt context settings for the current server
 
             The most recent messages that are within the time gap and message limits are used to create context.
             Context is used to help the LLM generate a response.
+
+            (All subcommands are per server)
         """
         pass
 

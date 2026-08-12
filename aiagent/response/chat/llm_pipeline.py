@@ -9,6 +9,7 @@ from redbot.core import Config, commands
 
 from aiagent.config.constants import RESERVED_PARAMETERS
 from aiagent.messages_list.messages import MessagesList
+from aiagent.response.chat.parameters import split_parameters
 from aiagent.types.abc import MixinMeta
 
 logger = logging.getLogger("red.0x42_cogs.aiagent")
@@ -27,17 +28,20 @@ class LLMPipeline:
 
     async def get_custom_parameters(self) -> Dict[str, Any]:
         custom_parameters = await self.config.guild(self.ctx.guild).parameters()
-        kwargs = json.loads(custom_parameters) if custom_parameters else {}
+        params = json.loads(custom_parameters) if custom_parameters else {}
 
         for reserved in RESERVED_PARAMETERS:
-            kwargs.pop(reserved, None)
+            params.pop(reserved, None)
 
-        return kwargs
+        return split_parameters(params)
 
     async def create_completion(self) -> Optional[str]:
         if not self.model:
             logger.error(
                 f"No model set for {self.ctx.guild.name}. Set one with [p]aiagent model <MODEL>"
+            )
+            await self.ctx.react_quietly(
+                "⚠️", message="`aiagent` has no model set for this server — see `[p]aiagent model list`"
             )
             return None
 
@@ -65,6 +69,14 @@ class LLMPipeline:
             await self.ctx.react_quietly("🔌", message="`aiagent` could not reach the LLM server")
         except openai.RateLimitError:
             await self.ctx.react_quietly("💤", message="`aiagent` request ratelimited")
+        except openai.BadRequestError:
+            logger.error(
+                f"LLM endpoint rejected the request in {self.ctx.guild.name}. "
+                "Check [p]aiagent response sampling and [p]aiagent response parameters."
+            )
+            await self.ctx.react_quietly(
+                "⚠️", message="`aiagent` request rejected — check custom parameters"
+            )
         except openai.NotFoundError:
             logger.error(
                 f'Model "{self.model}" not found on the LLM endpoint. '

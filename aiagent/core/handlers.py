@@ -2,15 +2,13 @@
 
 import asyncio
 import logging
-import math
-import random
 
 import discord
 from redbot.core import commands
 
 from aiagent.config.constants import URL_PATTERN
-from aiagent.config.defaults import DEFAULT_REPLY_PERCENT
-from aiagent.core.triggers import check_triggers
+from aiagent.core.throttle import SlotOutcome, delay_budget
+from aiagent.core.triggers import is_bot_mentioned_or_replied
 from aiagent.core.validators import is_valid_message
 from aiagent.response.dispatcher import dispatch_response
 from aiagent.types.abc import MixinMeta
@@ -31,55 +29,73 @@ async def handle_slash_command(cog: MixinMeta, inter: discord.Interaction, text:
             "You're not allowed to use this command here.", ephemeral=True
         )
 
-    percentage = await get_percentage(cog, ctx)
-    # Treat values very close to 1.0 as full-percentage to avoid float equality checks
-    if not math.isclose(percentage, 1.0, rel_tol=1e-9):
-        if not (await cog.config.guild(ctx.guild).reply_to_mentions_replies()):
-            return await ctx.send("This command is not enabled.", ephemeral=True)
+    # The slash command carries its own cooldown, but the concurrency cap and
+    # queue are bot-wide: without them, twenty /chat calls still swamp the server.
+    outcome = await cog.throttle.acquire_slot(
+        ctx.channel.id, wait_budget=delay_budget(ctx.message.created_at)
+    )
+    if outcome is not SlotOutcome.GRANTED:
+        return await ctx.send(
+            ":zzz: This bot is generating as much as it can at once. Try again shortly.",
+            ephemeral=True,
+        )
 
     try:
         await dispatch_response(cog, ctx)
     except Exception:
         logger.exception("Error in generating response for slash command")
         await ctx.send(":warning: Error in generating response!", ephemeral=True)
+    finally:
+        cog.throttle.release_slot()
 
 
 async def handle_message(cog: MixinMeta, message: discord.Message):
     """Handle regular message events"""
+    # Cheapest check first. This one is pure in-memory, while get_context parses
+    # prefixes and is_valid_message reads config and may build the LLM client.
+    # Most traffic in a whitelisted channel is not addressed to the bot.
+    if not await is_bot_mentioned_or_replied(cog, message):
+        return
+
     ctx: commands.Context = await cog.bot.get_context(message)
 
     if not (await is_valid_message(cog, ctx)):
         return
 
-    if not await check_triggers(cog, ctx, message) and random.random() > await get_percentage(cog, ctx):
+    waiting = cog.throttle.seconds_remaining(ctx.author.id)
+    if waiting > 0:
+        logger.debug(f"{ctx.author.id} is {waiting:.0f}s into a cooldown")
+        await ctx.react_quietly("💤", message="`aiagent` is cooling down, try again shortly")
         return
 
-    if URL_PATTERN.search(ctx.message.content):
-        ctx = await wait_for_embed(ctx)
+    # Tell them they are in line rather than leaving them looking at silence.
+    if cog.throttle.busy:
+        await ctx.react_quietly("⏳", message="`aiagent` is busy; you're in the queue")
 
-    await dispatch_response(cog, ctx)
+    outcome = await cog.throttle.acquire_slot(
+        ctx.channel.id, wait_budget=delay_budget(ctx.message.created_at)
+    )
 
+    if outcome is SlotOutcome.QUEUE_FULL:
+        logger.debug(f"Queue for channel {ctx.channel.id} is full")
+        await ctx.react_quietly("💤", message="`aiagent` has too many requests waiting")
+        return
 
-async def get_percentage(cog: MixinMeta, ctx: commands.Context) -> float:
-    """Get reply percentage based on member/role/channel/guild settings"""
-    role_percent = None
-    author = ctx.author
+    if outcome is SlotOutcome.TOO_SLOW:
+        # Answering now would drop a reply into a conversation that has moved on.
+        logger.debug("Gave up waiting for a slot; the message is too old to answer")
+        await ctx.react_quietly("💤", message="`aiagent` couldn't get to this in time")
+        return
 
-    for role in author.roles:
-        if role.id in (await cog.config.all_roles()):
-            role_percent = await cog.config.role(role).reply_percent()
-            break
+    try:
+        cog.throttle.record(ctx.author.id)
 
-    percentage = await cog.config.member(author).reply_percent()
-    if percentage is None:
-        percentage = role_percent
-    if percentage is None:
-        percentage = await cog.config.channel(ctx.channel).reply_percent()
-    if percentage is None:
-        percentage = await cog.config.guild(ctx.guild).reply_percent()
-    if percentage is None:
-        percentage = DEFAULT_REPLY_PERCENT
-    return percentage
+        if URL_PATTERN.search(ctx.message.content):
+            ctx = await wait_for_embed(ctx)
+
+        await dispatch_response(cog, ctx)
+    finally:
+        cog.throttle.release_slot()
 
 
 async def wait_for_embed(ctx: commands.Context) -> commands.Context:

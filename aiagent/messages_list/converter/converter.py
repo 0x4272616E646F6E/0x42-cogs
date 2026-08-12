@@ -1,12 +1,11 @@
 import logging
 
 from discord import Message
-from redbot.core import commands
 
 from aiagent.types.abc import MixinMeta
-from aiagent.utils.utilities import contains_youtube_link, is_embed_valid
-from aiagent.messages_list.converter.embed.formatter import format_embed_content
-from aiagent.messages_list.converter.helpers import (format_embed_text_content,
+from aiagent.utils.utilities import is_embed_valid
+from aiagent.messages_list.converter.helpers import (format_embed_content,
+                                                    format_embed_text_content,
                                                     format_sticker_content,
                                                     format_text_content)
 from aiagent.messages_list.entry import MessageEntry
@@ -15,12 +14,10 @@ logger = logging.getLogger("red.0x42_cogs.aiagent")
 
 
 class MessageConverter():
-    def __init__(self, cog: MixinMeta, ctx: commands.Context):
-        self.cog = cog
-        self.config = cog.config
+    """Turns Discord messages into ChatML entries, from the bot's point of view."""
+
+    def __init__(self, cog: MixinMeta):
         self.bot_id = cog.bot.user.id
-        self.init_msg = ctx.message
-        self.ctx = ctx
 
     async def convert(self, message: Message):
         """Converts a Discord message to ChatML format message(s)"""
@@ -31,8 +28,8 @@ class MessageConverter():
         elif message.stickers:
             content = await format_sticker_content(message)
             self.add_entry(content, res, role)
-        elif (len(message.embeds) > 0 and is_embed_valid(message)) or contains_youtube_link(message.content):
-            await self.handle_embed(message, res, role)
+        elif len(message.embeds) > 0 and is_embed_valid(message):
+            self.handle_embed(message, res, role)
         else:
             content = format_text_content(message)
             self.add_entry(content, res, role)
@@ -48,8 +45,8 @@ class MessageConverter():
         content = format_text_content(message)
         self.add_entry(content, res, role)
 
-    async def handle_embed(self, message: Message, res, role):
-        content = await format_embed_content(self.cog, message)
+    def handle_embed(self, message: Message, res, role):
+        content = format_embed_content(message)
         if not content:
             content = format_text_content(message)
             self.add_entry(content, res, role)

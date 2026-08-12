@@ -5,9 +5,11 @@ import asyncio
 import discord
 from redbot.core import commands
 
-from aiagent.core.llm_client import setup_llm_client
-from aiagent.types.abc import MixinMeta
 from aiagent.config.constants import SINGULAR_MENTION_PATTERN
+from aiagent.core.llm_client import setup_llm_client
+from aiagent.core.triggers import is_bot_mentioned_or_replied
+from aiagent.types.abc import MixinMeta
+from aiagent.utils import regex
 
 logger = logging.getLogger("red.0x42_cogs.aiagent")
 
@@ -115,30 +117,18 @@ async def check_user_status(cog: MixinMeta, ctx: commands.Context) -> Tuple[bool
 async def check_message_content(cog: MixinMeta, ctx: commands.Context) -> Tuple[bool, str]:
     """Validate message content and format"""
     if not ctx.interaction:
-        if SINGULAR_MENTION_PATTERN.match(ctx.message.content):
-            if not await is_bot_mentioned_or_replied(cog, ctx.message):
-                return False, "Single mention without bot reference"
+        # A message that is nothing but a mention of someone else is not for us.
+        if SINGULAR_MENTION_PATTERN.match(
+            ctx.message.content
+        ) and not await is_bot_mentioned_or_replied(cog, ctx.message):
+            return False, "Single mention without bot reference"
 
         min_length = await cog.config.guild(ctx.guild).messages_min_length()
         if 1 <= len(ctx.message.content) < min_length:
             return False, f"Message too short (min: {min_length})"
 
-    if (cog.ignore_regex.get(ctx.guild.id) and
-            cog.ignore_regex[ctx.guild.id].search(ctx.message.content)):
+    ignore_regex = cog.ignore_regex.get(ctx.guild.id)
+    if ignore_regex and regex.search(ignore_regex, ctx.message.content):
         return False, "Message matches ignore regex"
 
     return True, ""
-
-async def is_bot_mentioned_or_replied(cog: MixinMeta, message: discord.Message) -> bool:
-    """Check if message mentions or replies to bot"""
-    if not await cog.config.guild(message.guild).reply_to_mentions_replies():
-        return False
-
-    if cog.bot.user in message.mentions:
-        return True
-
-    reference = message.reference
-    if reference and isinstance(reference.resolved, discord.Message):
-        return reference.resolved.author.id == cog.bot.user.id
-
-    return False

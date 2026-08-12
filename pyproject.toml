@@ -1,0 +1,42 @@
+# Tooling configuration only. The cogs are loaded by Red from this repo's
+# directories and are not installed as a package, so there is no [project] table.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+# Importing anything under `aiagent.` pulls in redbot, so the test environment
+# needs Red installed. See the README for the dev setup.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "F",      # pyflakes
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "B",      # bugbear
+    "ASYNC",  # blocking calls in async code
+    "S",      # bandit-style security checks
+    "SIM",    # simplifications
+    "RUF",
+]
+ignore = [
+    "E501",  # long lines: the existing style runs wide, reformatting adds noise
+    "S311",  # non-crypto randomness is deliberate here
+    "S105",  # false positive on API_TOKEN_SERVICE, which is a service name
+    "B008",  # discord.py decorators legitimately call in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, and build deliberately odd fakes.
+"tests/*" = ["S101", "B011", "SIM117"]
+
+[tool.coverage.run]
+source = ["aiagent"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

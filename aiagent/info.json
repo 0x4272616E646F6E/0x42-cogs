@@ -15,9 +15,7 @@
     "requirements": [
         "openai>=2.0,<3",
         "pydantic>=2.7,<2.12",
-        "httpx>=0.27,<1",
-        "tiktoken>=0.7",
-        "tenacity>=8.2.3"
+        "httpx>=0.27,<1"
     ],
     "end_user_data_statement": "This cog stores the Discord user IDs of users who have opted in or out of having their messages processed, plus any per-user prompt overrides a server admin sets. Message content is not stored persistently; recent channel messages are read at response time and sent to the LLM endpoint the bot owner has configured.",
     "tags": [

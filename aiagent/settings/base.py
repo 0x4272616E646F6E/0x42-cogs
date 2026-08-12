@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional
+from urllib.parse import urlparse
 
 import discord
 from redbot.core import checks, commands
@@ -9,17 +9,11 @@ from redbot.core.utils.menus import SimpleMenu
 from aiagent.settings.history import HistorySettings
 from aiagent.settings.owner import OwnerSettings
 from aiagent.settings.prompt import PromptSettings
-from aiagent.settings.random_message import RandomMessageSettings
 from aiagent.settings.response import ResponseSettings
 from aiagent.settings.triggers import TriggerSettings
-from aiagent.settings.utilities import (
-    get_available_models,
-    get_config_attribute,
-    get_mention_type,
-)
+from aiagent.settings.utilities import get_available_models
 from aiagent.types.abc import MixinMeta
-from aiagent.types.enums import MentionType
-from aiagent.types.types import COMPATIBLE_CHANNELS, COMPATIBLE_MENTIONS
+from aiagent.types.types import COMPATIBLE_CHANNELS
 
 logger = logging.getLogger("red.0x42_cogs.aiagent")
 NO_VALUE = "`None`"
@@ -30,7 +24,6 @@ class Settings(
     ResponseSettings,
     TriggerSettings,
     OwnerSettings,
-    RandomMessageSettings,
     MixinMeta,
 ):
     @commands.group(aliases=["ai_agent"])
@@ -57,8 +50,12 @@ class Settings(
         await ctx.react_quietly("✅")
 
     @aiagent.command(aliases=["settings", "showsettings"])
+    @checks.admin_or_permissions(manage_guild=True)
     async def config(self, ctx: commands.Context):
         """Returns current config
+
+        Admin only: this lists whitelisted members and roles, and the host the
+        bot sends messages to.
 
         (Current config per server)
         """
@@ -74,18 +71,7 @@ class Settings(
 
         main_embed.add_field(name="Model", inline=True, value=f"`{config['model']}`")
         main_embed.add_field(
-            name="Server Reply Percent",
-            inline=True,
-            value=f"`{config['reply_percent'] * 100:.2f}`%",
-        )
-
-        main_embed.add_field(
             name="Opt In By Default", inline=True, value=f"`{config['optin_by_default']}`"
-        )
-        main_embed.add_field(
-            name="Always Reply if Pinged",
-            inline=True,
-            value=f"`{config['reply_to_mentions_replies']}`",
         )
         main_embed.add_field(
             name="Max History Size",
@@ -103,11 +89,14 @@ class Settings(
             value=" ".join(channels) if channels else NO_VALUE,
         )
 
-        endpoint_url = str(glob_config["llm_endpoint"] or "")
+        # Host only: the full URL can carry a port, path or credentials, and this
+        # embed is visible to every admin in the server. [p]aiagentowner endpoint
+        # shows the whole thing to the bot owner.
+        endpoint_host = urlparse(str(glob_config["llm_endpoint"] or "")).hostname
         main_embed.add_field(
             name="LLM Endpoint",
             inline=True,
-            value=f"`{endpoint_url}`" if endpoint_url else NO_VALUE,
+            value=f"`{endpoint_host}`" if endpoint_host else NO_VALUE,
         )
 
         whitelisted_trigger = bool(
@@ -161,36 +150,7 @@ class Settings(
 
         for embed in embeds:
             await ctx.send(embed=embed)
-        
 
-    @aiagent.command()
-    @checks.is_owner()
-    async def percent(self, ctx: commands.Context, mention: Optional[COMPATIBLE_MENTIONS], percent: Optional[float]):
-        """Change the bot's response chance for a server (or a provided user, role, and channel)
-
-        If multiple percentage can be used, the most specific percentage will be used, eg. it will go for: member > role > channel > server
-
-        **Arguments**
-            - `mention` (Optional) A mention of a user, role, or channel
-            - `percent` (Optional) A number between 0 and 100, if omitted, will reset to using other percentages
-        (Setting is per server)
-        """
-        mention_type = get_mention_type(mention)
-        config_attr = get_config_attribute(self.config, mention_type, ctx, mention)
-        if percent is None and mention_type == MentionType.SERVER:
-            return await ctx.send(":warning: No percent provided")
-        if percent or mention_type == MentionType.SERVER:
-            await config_attr.reply_percent.set(percent / 100)
-            desc = f"{percent:.2f}%"
-        else:
-            await config_attr.reply_percent.set(None)
-            desc = "`Custom percent no longer set, will default to other percents`"
-        embed = discord.Embed(
-            title=f"Chance that the bot will reply on this {mention_type.name.lower()} is now:",
-            description=desc,
-            color=await ctx.embed_color(),
-        )
-        return await ctx.send(embed=embed)
 
     @aiagent.command()
     @checks.is_owner()
@@ -220,7 +180,7 @@ class Settings(
         return await ctx.send(embed=embed)
 
     @aiagent.command()
-    @checks.admin_or_permissions(manage_guild=True)
+    @checks.is_owner()
     async def remove(
         self,
         ctx: commands.Context,

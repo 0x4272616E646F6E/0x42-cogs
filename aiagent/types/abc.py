@@ -6,6 +6,8 @@ from openai import AsyncOpenAI
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 
+from aiagent.core.throttle import ResponseThrottle
+
 
 # for other settings to use
 @commands.group(aliases=["ai_agent"])
@@ -19,7 +21,7 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
     pass
 
 
-class MixinMeta(ABC):
+class MixinMeta(ABC):  # noqa: B024 - a typing marker for the settings mixins, not an interface
     def __init__(self, *args):
         self.bot: Red
         self.config: Config
@@ -28,4 +30,5 @@ class MixinMeta(ABC):
         self.ignore_regex: dict[int, re.Pattern]
         self.channels_whitelist: dict[int, list[int]]
         self.openai_client: AsyncOpenAI
-        self.optindefault: dict[int, bool] 
+        self.optindefault: dict[int, bool]
+        self.throttle: ResponseThrottle

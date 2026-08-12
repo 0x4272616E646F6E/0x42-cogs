@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Red-DiscordBot requires >=3.8.1,<3.12, so 3.11 is the newest usable.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          # Red first: it pins aiohttp, discord.py and typing-extensions, and the
+          # cog has to work against those exact versions.
+          python -m pip install "Red-DiscordBot>=3.5.1"
+          # Then the cog's own requirements, straight from the manifest Red uses.
+          python - <<'EOF' > requirements.txt
+          import json
+          print("\n".join(json.load(open("aiagent/info.json"))["requirements"]))
+          EOF
+          python -m pip install -r requirements.txt
+          python -m pip install pytest ruff
+
+      - name: Check the install did not fight Red's pins
+        run: python -m pip check
+
+      - name: Lint
+        run: python -m ruff check aiagent/ tests/
+
+      - name: Test
+        run: python -m pytest
+
+      - name: Confirm the cog still imports the way Red loads it
+        run: |
+          python -c "
+          import aiagent
+          from aiagent.core.aiagent import AIAgent
+          commands = [c.qualified_name for c in AIAgent.__cog_commands__]
+          assert len(commands) > 40, commands
+          print(f'loaded {len(commands)} commands')
+          "

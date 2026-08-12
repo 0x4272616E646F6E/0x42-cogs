@@ -41,22 +41,6 @@ class OwnerSettings(MixinMeta):
         )
         return await ctx.send(embed=embed)
 
-    @aiagentowner.command(name="maxtopiclength")
-    async def max_random_prompt_length(self, ctx: commands.Context, length: int):
-        """Sets the maximum character length of a random prompt that can set by any server.
-
-            (Does not apply to already set prompts, only new ones)
-        """
-        if length < 1:
-            return await ctx.send("Please enter a positive integer.")
-        await self.config.max_random_prompt_length.set(length)
-        embed = discord.Embed(
-            title="The maximum topic length is now:",
-            description=f"{length}",
-            color=await ctx.embed_color(),
-        )
-        return await ctx.send(embed=embed)
-
     @aiagentowner.command()
     async def endpoint(self, ctx: commands.Context, url: Optional[str]):
         """Sets the URL of the OpenAI-compatible LLM server to use
@@ -147,7 +131,19 @@ class OwnerSettings(MixinMeta):
                 guilds_with_parameters.append(str(guild.name if guild else guild_id))
 
         total_guilds = len(await self.config.all_guilds())
-        if restored_count:
+        if not total_guilds:
+            # Nothing is stored for any server yet, so there was no per-server model to
+            # set. Without this hint the bot would just stay silent on every message.
+            embed.add_field(
+                name="⚠️ Next step",
+                value=(
+                    f"No servers are configured yet, so no model has been picked.\n"
+                    f"Run `{ctx.clean_prefix}aiagent model <MODEL>` in each server "
+                    f"(`{ctx.clean_prefix}aiagent model list` shows the options)."
+                ),
+                inline=False,
+            )
+        elif restored_count:
             value = f"Restored previously set models on this endpoint for {restored_count} servers."
             if restored_count < total_guilds:
                 value += f"\nA further {total_guilds - restored_count} servers were set to `{fallback_model}`."
@@ -198,7 +194,7 @@ class OwnerSettings(MixinMeta):
         """
         path = Path(cog_data_path(self) / "settings.json")
 
-        if not path.exists():
+        if not await asyncio.to_thread(path.exists):
             return await ctx.send(":warning: Export is only supported for json backends")
 
         await ctx.send(
@@ -225,7 +221,7 @@ class OwnerSettings(MixinMeta):
 
         path = Path(cog_data_path(self) / "settings.json")
 
-        if not path.exists():
+        if not await asyncio.to_thread(path.exists):
             return await ctx.send(":warning: Import is only supported for json backends")
 
         embed = discord.Embed(
@@ -244,8 +240,11 @@ class OwnerSettings(MixinMeta):
         if pred.result is False:
             return await confirm.edit(embed=discord.Embed(title="Cancelled.", color=await ctx.embed_color()))
 
-        with path.open("w") as f:
-            json.dump(new_config, f, indent=4)
+        def write_config():
+            with path.open("w") as file_handle:
+                json.dump(new_config, file_handle, indent=4)
+
+        await asyncio.to_thread(write_config)
 
         return await confirm.edit(embed=discord.Embed(
             title="Overwritten!",

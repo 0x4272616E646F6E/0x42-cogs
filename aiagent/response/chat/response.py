@@ -1,25 +1,21 @@
-import asyncio
 import logging
-import random
-import re
-from datetime import datetime, timezone
 
+import discord
 from discord import AllowedMentions
 from redbot.core import Config, commands
 
-from aiagent.config.constants import REGEX_RUN_TIMEOUT
 from aiagent.messages_list.messages import MessagesList
 from aiagent.response.chat.llm_pipeline import LLMPipeline
 from aiagent.types.abc import MixinMeta
-from aiagent.utils.utilities import to_thread
+from aiagent.utils import regex
 
 logger = logging.getLogger("red.0x42_cogs.aiagent")
 
-# Use to_thread to compile & apply a regex pattern
-@to_thread(timeout=REGEX_RUN_TIMEOUT)
-def compile_and_apply(pattern_str: str, text: str) -> str:
-    pattern = re.compile(pattern_str)
-    return pattern.sub('', text).strip(' \n')
+MESSAGE_LENGTH_LIMIT = 2000
+
+# A runaway generation should not turn one mention into a wall of messages.
+MAX_RESPONSE_CHUNKS = 3
+TRUNCATION_NOTICE = " […truncated]"
 
 async def remove_patterns_from_response(ctx: commands.Context, config: Config, response: str) -> str:
     # Get patterns from config and replace "{botname}".
@@ -27,11 +23,15 @@ async def remove_patterns_from_response(ctx: commands.Context, config: Config, r
     botname = ctx.message.guild.me.nick or ctx.bot.user.display_name
     patterns = [p.replace(r'{botname}', botname) for p in patterns]
 
-    # Expand patterns that have "{authorname}" based on recent authors.
-    authors = {
-        msg.author.display_name async for msg in ctx.channel.history(limit=10)
-        if msg.author != ctx.guild.me
-    }
+    # Expanding "{authorname}" needs recent authors, which costs an API call.
+    # Only pay for it when a pattern actually uses the placeholder.
+    authors = set()
+    if any('{authorname}' in pattern for pattern in patterns):
+        authors = {
+            msg.author.display_name async for msg in ctx.channel.history(limit=10)
+            if msg.author != ctx.guild.me
+        }
+
     expanded_patterns = []
     for pattern in patterns:
         if '{authorname}' in pattern:
@@ -43,42 +43,57 @@ async def remove_patterns_from_response(ctx: commands.Context, config: Config, r
     # Apply each pattern sequentially.
     cleaned = response.strip(' \n')
     for pattern in expanded_patterns:
-        try:
-            cleaned = await compile_and_apply(pattern, cleaned)
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout applying regex pattern: {pattern}")
-        except Exception:
-            logger.warning(f"Error applying regex pattern: {pattern}", exc_info=True)
+        cleaned = regex.sub(pattern, cleaned)
     return cleaned
 
-async def should_reply(ctx: commands.Context) -> bool:
-    if ctx.interaction:
-        return False
+def split_response(response: str) -> list:
+    """Split into Discord-sized chunks, capped so one runaway reply can't flood a channel.
 
-    try:
-        await ctx.fetch_message(ctx.message.id)
-    except Exception:
-        return False
+    A local model with no `max_tokens` set can generate for a very long time; without
+    a cap that arrives as an unbounded burst of messages. Set `max_tokens` via
+    `[p]aiagent response parameters` to bound it at the source instead.
+    """
+    chunks = [
+        response[index:index + MESSAGE_LENGTH_LIMIT]
+        for index in range(0, len(response), MESSAGE_LENGTH_LIMIT)
+    ]
 
-    if (datetime.now(timezone.utc) - ctx.message.created_at).total_seconds() > 8 or random.random() < 0.25:
-        return True
+    if len(chunks) <= MAX_RESPONSE_CHUNKS:
+        return chunks
 
-    async for last_msg in ctx.message.channel.history(limit=1):
-        if last_msg.author == ctx.message.guild.me:
-            return True
-    return False
+    kept = chunks[:MAX_RESPONSE_CHUNKS]
+    dropped = len(chunks) - MAX_RESPONSE_CHUNKS
+    logger.warning(
+        f"Response was {len(response)} characters; sent "
+        f"{MAX_RESPONSE_CHUNKS} messages and dropped {dropped}."
+    )
+    kept[-1] = kept[-1][:MESSAGE_LENGTH_LIMIT - len(TRUNCATION_NOTICE)] + TRUNCATION_NOTICE
+    return kept
+
 
 async def send_response(ctx: commands.Context, response: str, can_reply: bool) -> bool:
     allowed = AllowedMentions(everyone=False, roles=False, users=[ctx.message.author])
-    if len(response) >= 2000:
-        for i in range(0, len(response), 2000):
-            await ctx.send(response[i:i + 2000], allowed_mentions=allowed)
-    elif can_reply and await should_reply(ctx):
-        await ctx.message.reply(response, mention_author=False, allowed_mentions=allowed)
-    elif ctx.interaction:
-        await ctx.interaction.followup.send(response, allowed_mentions=allowed)
-    else:
-        await ctx.send(response, allowed_mentions=allowed)
+    chunks = split_response(response)
+
+    if ctx.interaction:
+        for chunk in chunks:
+            await ctx.interaction.followup.send(chunk, allowed_mentions=allowed)
+        return True
+
+    # Reply to the message that summoned us so threads stay legible. If it has been
+    # deleted, Discord rejects the reply and a plain send is the fallback — cheaper
+    # than fetching the message first to find out.
+    if can_reply:
+        try:
+            await ctx.message.reply(
+                chunks[0], mention_author=False, allowed_mentions=allowed
+            )
+            chunks = chunks[1:]
+        except discord.HTTPException:
+            logger.debug("Could not reply to the triggering message; sending instead.")
+
+    for chunk in chunks:
+        await ctx.send(chunk, allowed_mentions=allowed)
     return True
 
 async def create_chat_response(cog: MixinMeta, ctx: commands.Context, messages_list: MessagesList) -> bool:

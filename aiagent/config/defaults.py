@@ -19,15 +19,6 @@ DEFAULT_REMOVE_PATTERNS = [
     r'\n*\[Image[^\]]+\]'
 ]
 
-DEFAULT_RANDOM_PROMPTS = [
-    "Something you saw on the internet today",
-    "A random thought you just had",
-    "A question you want to ask the channel",
-    "Something mildly interesting that happened to you",
-]
-
-DEFAULT_REPLY_PERCENT = 0.5
-
 DEFAULT_MIN_MESSAGE_LENGTH = 2
 
 DEFAULT_LLM_MODEL = ""
@@ -43,7 +34,6 @@ DEFAULT_GLOBAL = {
     "llm_endpoint_request_timeout": 60,
     "optout": [],
     "optin": [],
-    "max_random_prompt_length": 200,
     "max_prompt_length": 200,
     "custom_text_prompt": None,
     "endpoint_model_history": {},
@@ -52,11 +42,9 @@ DEFAULT_GLOBAL = {
 DEFAULT_GUILD = {
     "optin_by_default": False,
     "optin_disable_embed": False,
-    "reply_percent": DEFAULT_REPLY_PERCENT,
     "messages_backread": 10,
     "messages_backread_seconds": 60 * 120,
     "messages_min_length": DEFAULT_MIN_MESSAGE_LENGTH,
-    "reply_to_mentions_replies": True,
     "model": DEFAULT_LLM_MODEL,
     "custom_text_prompt": None,
     "presets": "{}",
@@ -67,27 +55,17 @@ DEFAULT_GUILD = {
     "ignore_regex": None,
     "removelist_regexes": DEFAULT_REMOVE_PATTERNS,
     "parameters": None,
-    "conversation_reply_percent": 0,
-    "conversation_reply_time": 20,
     "custom_model_tokens_limit": None,
-    "always_reply_on_words": [],
-    "grok_trigger": False,
-    "random_messages_enabled": False,
-    "random_messages_percent": 0.012,
-    "random_messages_prompts": DEFAULT_RANDOM_PROMPTS,
 }
 
 DEFAULT_CHANNEL = {
     "custom_text_prompt": None,
-    "reply_percent": None
 }
 
 DEFAULT_ROLE = {
     "custom_text_prompt": None,
-    "reply_percent": None
 }
 
 DEFAULT_MEMBER = {
     "custom_text_prompt": None,
-    "reply_percent": None
 }

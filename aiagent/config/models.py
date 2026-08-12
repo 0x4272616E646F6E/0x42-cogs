@@ -61,7 +61,7 @@ def get_model_tokens_limit(model: str) -> int:
             return limit
 
     best = None
-    for prefix, limit in MODEL_TOKENS_LIMITS.items():
+    for prefix in MODEL_TOKENS_LIMITS:
         if name.startswith(prefix) and (best is None or len(prefix) > len(best)):
             best = prefix
 

@@ -15,4 +15,4 @@ class DashboardIntegration(MixinMeta):
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        dashboard_cog.rpc.third_parties_handler.add_third_party(self) 
+        dashboard_cog.rpc.third_parties_handler.add_third_party(self)

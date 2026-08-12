@@ -11,7 +11,7 @@ TEMPLATES_PATH = pathlib.Path(__file__).parent / "templates"
 @dashboard_page(name="data_usage_consent", description="Opt in/out of providing your messages to the LLM endpoint the bot owner configured", methods=("GET", "POST"))
 async def opt_consent(self, user: discord.User, **kwargs):
     import wtforms
-    
+
     class Form(kwargs["Form"]):
         def __init__(self):
             super().__init__(prefix="consent_")
@@ -44,10 +44,10 @@ async def opt_consent(self, user: discord.User, **kwargs):
     if form.validate_on_submit():
         try:
             if form.accept.data:
-                await self.config.optin.set(whitelist + [user.id])
+                await self.config.optin.set([*whitelist, user.id])
                 await self.config.optout.set([id for id in blacklist if id != user.id])
             elif form.reject.data:
-                await self.config.optout.set(blacklist + [user.id])
+                await self.config.optout.set([*blacklist, user.id])
                 await self.config.optin.set([id for id in whitelist if id != user.id])
         except Exception:
             return {
@@ -62,7 +62,7 @@ async def opt_consent(self, user: discord.User, **kwargs):
 
     template_path = TEMPLATES_PATH / "consent_page.html"
     source = template_path.read_text()
-    
+
     return {
         "status": 0,
         "web_content": {
@@ -71,4 +71,4 @@ async def opt_consent(self, user: discord.User, **kwargs):
             "whitelist_text": whitelist_text,  # Context variable
             "form": form  # Context variable (WTForms object)
         },
-    } 
+    }

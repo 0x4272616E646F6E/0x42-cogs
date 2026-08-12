@@ -15,7 +15,7 @@ from aiagent.config.defaults import (
     DEFAULT_ROLE,
 )
 from aiagent.core.handlers import handle_message, handle_slash_command
-from aiagent.core.random_message_task import RandomMessageTask
+from aiagent.core.throttle import ResponseThrottle
 from aiagent.dashboard.base import DashboardIntegration
 from aiagent.settings.base import Settings
 from aiagent.types.abc import CompositeMetaClass
@@ -29,7 +29,6 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 class AIAgent(
     DashboardIntegration,
     Settings,
-    RandomMessageTask,
     commands.Cog,
     metaclass=CompositeMetaClass,
 ):
@@ -50,6 +49,8 @@ class AIAgent(
         self.channels_whitelist: dict[int, list[int]] = {}
         self.ignore_regex: dict[int, re.Pattern] = {}
         self.override_prompt_start_time: dict[int, datetime] = {}
+        # Bounds how much LLM work a burst of mentions can start. See core/throttle.py
+        self.throttle = ResponseThrottle()
 
         self.config.register_member(**DEFAULT_MEMBER)
         self.config.register_role(**DEFAULT_ROLE)
@@ -69,18 +70,17 @@ class AIAgent(
 
             self.ignore_regex[guild_id] = re.compile(pattern) if pattern else None
 
-        self.random_message_trigger.start()
-
     async def cog_unload(self):
         if self.openai_client:
             await self.openai_client.close()
-        self.random_message_trigger.cancel()
 
     async def red_delete_data_for_user(self, *, requester, user_id: int):
-        for guild in self.bot.guilds:
-            member = guild.get_member(user_id)
-            if member:
-                await self.config.member(member).clear()
+        # Keyed by stored data rather than by current membership: a user who has
+        # since left a server still has per-member settings to erase there.
+        all_members = await self.config.all_members()
+        for guild_id, members in all_members.items():
+            if user_id in members:
+                await self.config.member_from_ids(guild_id, user_id).clear()
 
         optin = await self.config.optin()
         if user_id in optin:
