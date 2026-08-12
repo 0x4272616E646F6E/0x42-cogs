@@ -28,12 +28,13 @@ version** — use it:
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
-python -m pip install "Red-DiscordBot>=3.5.1" "openai>=2.0,<3" "httpx>=0.27,<1" "tiktoken>=0.7" "tenacity>=8.2.3"
+python -m pip install "Red-DiscordBot>=3.5.1" "openai>=2.0,<3" "pydantic>=2.7,<2.12" "httpx>=0.27,<1" "tiktoken>=0.7" "tenacity>=8.2.3"
 ```
 
 `aiohttp` and `discord.py` are intentionally not listed: Red pins them exactly
 (`aiohttp==3.9.5`, `discord-py==2.7.1`), and installing different versions alongside
-it breaks the bot.
+it breaks the bot. `pydantic` is capped below 2.12 for the same reason — see
+[the cog README](./aiagent/README.md#why-pydantic-is-capped).
 
 To work on a cog against a running bot, add the checkout as a local repo:
 

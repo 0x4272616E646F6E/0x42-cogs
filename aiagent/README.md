@@ -127,10 +127,27 @@ Remove list regex patterns only support `{authorname}` (will use authors of last
 |---|---|
 | Python | 3.11 (Red supports `>=3.8.1,<3.12`, so this is the newest usable) |
 | Red-DiscordBot | 3.5.1 or newer |
-| Installed by Downloader | `openai>=2.0,<3`, `httpx>=0.27,<1`, `tiktoken>=0.7`, `tenacity>=8.2.3` |
+| Installed by Downloader | `openai>=2.0,<3`, `pydantic>=2.7,<2.12`, `httpx>=0.27,<1`, `tiktoken>=0.7`, `tenacity>=8.2.3` |
 
 `aiohttp` and `discord.py` come from Red itself, which pins them exactly, so this cog
 does not declare them.
+
+### Why pydantic is capped
+
+Do not remove `pydantic<2.12` while Red pins `typing-extensions==4.13.2`.
+
+`openai` pulls in `pydantic`, and pydantic 2.12+ needs `typing-extensions>=4.14.1`
+(its `pydantic_core` imports `Sentinel`, added in typing-extensions 4.15). Downloader
+installs a new enough typing-extensions into its own `lib/` folder, but Red has already
+imported the pinned 4.13.2 from its venv by the time a cog loads, so the venv copy wins
+and the cog fails at import with:
+
+```
+ImportError: cannot import name 'Sentinel' from 'typing_extensions'
+```
+
+pydantic 2.11.x uses `pydantic-core` 2.33.x, which only needs `typing-extensions>=4.12.2`.
+Once Red ships a newer typing-extensions, this cap can be raised.
 
 ## Privacy
 
